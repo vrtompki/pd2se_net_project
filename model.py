@@ -5,9 +5,50 @@ from pytorchcv.models.shufflenetv2 import ShuffleUnit
 import warnings
 import torch.nn.functional as F
 from config import *
-
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+
+class BasicCNN(nn.Module):
+    def __int__(self):
+        super(BasicCNN, self).__init__()
+        self.Layer0 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=4)
+        self.relu1 = nn.ReLU()
+
+        self.Layer1 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4)
+        self.relu2 = nn.ReLU()
+
+        self.pool = nn.MaxPool2d(kernel_size=2)
+
+        self.Layer2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4)
+        self.relu3 = nn.ReLU()
+
+        self.Layer3 = nn.Conv2d(in_channels=32, out_channels=256, kernel_size=4)
+        self.relu4 = nn.ReLU()
+
+        self.FC1 = nn.Linear(128*128*256, NUM_CLASSES_1)
+        self.FC2 = nn.Linear(128*128*256, NUM_CLASSES_2)
+        self.FC3 = nn.Linear(128*128*256, NUM_CLASSES_3)
+
+    def forward(self, x):
+        x = self.Layer0(x)
+        x = self.relu1(x)
+
+        x = self.Layer1(x)
+        x = self.relu2(x)
+
+        x = self.pool(x)
+
+        x = self.Layer2(x)
+        x = self.relu3(x)
+
+        x = self.Layer3(x)
+        x = self.relu4(x)
+
+        x1 = F.softmax(self.FC1(x))
+        x2 = F.softmax(self.FC2(x))
+        x3 = F.softmax(self.FC3(x))
+
+        return x1, x2, x3
 
 # class ResNet_45(nn.Module):
 #     def __int__(self, pretrained=False):
@@ -56,13 +97,14 @@ class PlantModel(nn.Module):
         base_mod = models.resnet50()
         num_fts = base_mod.fc.in_features
         base_mod.fc = nn.Linear(num_fts, NUM_CLASSES_3)
-        base_path = "D:\\vrtompki\\pd2senet\\models\\27_Classes_EPOCH505_loss_2.638_acc_0.714_21-06-19"
+        base_path = 'C:\\Users\\Vincent\\Documents\\Big Data in Agriculture\\Datasets\\Liang\\pd2se_net_project\\models\\EPOCH8_loss_0.999_acc_0.67913-06-19'
         checkpoint = torch.load(base_path)
+        base_mod.load_state_dict(checkpoint['model_state_dict'])
         children_list = list(base_mod.children())
         self.Layer0 = nn.Sequential(*children_list[0:4])
         self.Layer1 = nn.Sequential(children_list[4])
         self.Layer2 = nn.Sequential(children_list[5])
-        base_mod.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        self.Layer3 = nn.Sequential(children_list[6])
         self.Shuffle1_1 = ShuffleUnit(in_channels=512, out_channels=512, downsample=False,
                                       use_residual=False, use_se=False)
         self.Shuffle1_2 = ShuffleUnit(in_channels=512, out_channels=512, downsample=True,
@@ -75,6 +117,7 @@ class PlantModel(nn.Module):
         x = self.Layer0(x)
         x = self.Layer1(x)
         x = self.Layer2(x)
+        x = self.Layer3(x)
         x = self.Shuffle1_3(self.Shuffle1_2(self.Shuffle1_1(x)))
         x = F.softmax(self.FC(x.view(-1, 2048*8*8)), dim=1)
         return x
