@@ -5,7 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from torchvision import models
-from model import PD2SEModel, DiseaseModel, PlantModel
+from model import PD2SEModel, DiseaseModel, PlantModel, BasicCNN
 from pytorchcv.models.shufflenetv2 import ShuffleUnit
 from config import *
 from dataset import PlantsDiseaseDataset
@@ -499,6 +499,153 @@ def train_res50_9():
     # load best model weights
     plant_mod.load_state_dict(best_model_wts)
     return plant_mod
+
+
+def train_basic_cnn():
+    model = BasicCNN()
+    opt = torch.optim.SGD(model.parameters(), lr=1e-4, weight_decay=5e-5, momentum=0.9)
+
+    criterion1 = nn.CrossEntropyLoss()
+    criterion2 = nn.CrossEntropyLoss()
+    criterion3 = nn.CrossEntropyLoss()
+
+    since = time.time()
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_acc = 0.0
+    best_loss = sys.maxsize
+    patience = 0
+
+    val_confusion_matrix1 = torch.zeros(NUM_CLASSES_1, NUM_CLASSES_1)
+    train_confusion_matrix1 = torch.zeros(NUM_CLASSES_1, NUM_CLASSES_1)
+    train_losses1 = []
+    train_accuracies1 = []
+    val_accuracies1 = []
+    val_losses1 = []
+
+    val_confusion_matrix2 = torch.zeros(NUM_CLASSES_2, NUM_CLASSES_2)
+    train_confusion_matrix2 = torch.zeros(NUM_CLASSES_2, NUM_CLASSES_2)
+    train_losses2 = []
+    train_accuracies2 = []
+    val_accuracies2 = []
+    val_losses2 = []
+
+    val_confusion_matrix3 = torch.zeros(NUM_CLASSES_3, NUM_CLASSES_3)
+    train_confusion_matrix3 = torch.zeros(NUM_CLASSES_3, NUM_CLASSES_3)
+    train_losses3 = []
+    train_accuracies3 = []
+    val_accuracies3 = []
+    val_losses3 = []
+
+    train_dataset = PlantsDiseaseDataset(train_val='train')
+    val_dataset = PlantsDiseaseDataset(train_val='val')
+
+    train_loader = torch.utils.data.DataLoader(train_dataset,
+                                               batch_size=BATCH_SIZE,
+                                               num_workers=4,
+                                               drop_last=True,
+                                               shuffle=True)
+
+    val_loader = torch.utils.data.DataLoader(val_dataset,
+                                             batch_size=BATCH_SIZE,
+                                             num_workers=4,
+                                             drop_last=True,
+                                             shuffle=True)
+
+    dataset_size = {'train': len(train_dataset),
+                    'val': len(val_dataset)}
+
+    loader = {'train': train_loader,
+              'val': val_loader}
+    if USE_GPU:
+        torch.cuda.empty_cache()
+        torch.cuda.init()
+    if not os.path.exists(MODEL_DIR):
+        os.makedirs(MODEL_DIR)
+
+    criterion.to(DEVICE)
+    plant_mod.to(DEVICE)
+    for epoch in range(NUM_EPOCHS):
+        print('Epoch {}/{}'.format(epoch + 1, NUM_EPOCHS))
+        print('-' * 10)
+        for mode in ['train', 'val']:
+            running_loss = 0.0
+            running_corrects = 0
+
+            if mode == 'train':
+                plant_mod.train()
+            else:
+                plant_mod.eval()
+
+            for batch in tqdm(loader[mode], file=sys.stdout):
+                opt.zero_grad()
+                _input = batch['image'].to(DEVICE)
+                _label = batch['label_1'] - 1
+                _label = _label.to(DEVICE)
+
+                with torch.set_grad_enabled(mode == 'train'):
+                    out = plant_mod(_input)
+                    _, predictions = torch.max(out, 1)
+                    loss = criterion(out, _label)
+                    if mode == 'train':
+                        loss.backward()
+                        opt.step()
+
+                running_loss += loss.item() * _input.size(0)
+                running_corrects += torch.sum(predictions == _label.data)
+            epoch_loss = running_loss / dataset_size[mode]
+            epoch_acc = running_corrects.double() / dataset_size[mode]
+            if mode == 'train':
+                train_confusion_matrix[_label.data, predictions] += 1
+                train_losses.append(epoch_loss)
+                train_accuracies.append(epoch_acc)
+
+            else:
+                val_confusion_matrix[_label.data, predictions] += 1
+                val_losses.append(epoch_loss)
+                val_accuracies.append(epoch_acc)
+
+            print('{} Loss: {:.4f} Acc: {:.4f}'.format(mode, epoch_loss, epoch_acc))
+            if mode == 'val':
+                if epoch_acc > best_acc:
+                    best_acc = epoch_acc
+                    best_model_wts = copy.deepcopy(plant_mod.state_dict())
+                    model_stats = 'EPOCH{}_loss_{:.3f}_acc_{:.3f}_'.format(epoch,
+                                                                           epoch_loss, epoch_acc)
+                    model_time = datetime.now().strftime("%d-%m-%y")
+                    model_path = os.path.join(MODEL_DIR, "9_Classes_" + model_stats + model_time)
+                    torch.save({'epoch': epoch,
+                                'model_state_dict': plant_mod.state_dict(),
+                                'optimizer_state_dict': opt.state_dict(),
+                                'loss': loss}, model_path)
+                print()
+                if epoch_loss >= best_loss:
+                    patience += 1
+                    print('Patience increased...')
+                    print('Patience is: {}/{}\n'.format(patience, PATIENCE))
+                if epoch_loss < best_loss:
+                    best_loss = epoch_loss
+                    if patience is not 0:
+                        patience = 0
+                        print(' Patience has been reset....')
+                    print('Patience is: {}/{}\n'.format(patience, PATIENCE))
+        if patience == PATIENCE:
+            print('=' * 40)
+            print('Patience tolerance has been met. Saving model and results....')
+            break
+    stop_time = datetime.now().strftime("%d-%m-%y")
+    time_elapsed = time.time() - since
+    print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+    print('Best validation accuracy was: {:4f}%'.format(best_acc * 100))
+    print('Best validation loss was: {:4f}'.format(best_loss))
+    pickle.dump(train_losses, open('train_losses_9_' + stop_time + '_.pkl', 'wb'))
+    pickle.dump(train_accuracies, open('train_acc_9_' + stop_time + '_.pkl', 'wb'))
+    pickle.dump(train_confusion_matrix, open('train_conf_mat_9_' + stop_time + '_.pkl', 'wb'))
+    pickle.dump(val_losses, open('val_losses_9_' + stop_time + '_.pkl', 'wb'))
+    pickle.dump(val_accuracies, open('val_acc_9_' + stop_time + '_.pkl', 'wb'))
+    pickle.dump(train_confusion_matrix, open('val_conf_mat_9_' + stop_time + '_.pkl', 'wb'))
+
+    # load best model weights
+    plant_mod.load_state_dict(best_model_wts)
 
 
 if __name__ == '__main__':
