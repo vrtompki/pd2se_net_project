@@ -9,25 +9,23 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 class BasicCNN(nn.Module):
-    def __int__(self):
+    def __init__(self):
         super(BasicCNN, self).__init__()
         self.Layer0 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=4)
         self.relu1 = nn.ReLU()
 
-        self.Layer1 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4)
+        self.Layer1 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=4)
         self.relu2 = nn.ReLU()
 
-        self.pool = nn.MaxPool2d(kernel_size=2)
-
-        self.Layer2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4)
+        self.Layer2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4)
         self.relu3 = nn.ReLU()
 
-        self.Layer3 = nn.Conv2d(in_channels=32, out_channels=256, kernel_size=4)
+        self.Layer3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4)
         self.relu4 = nn.ReLU()
 
-        self.FC1 = nn.Linear(128*128*256, NUM_CLASSES_1)
-        self.FC2 = nn.Linear(128*128*256, NUM_CLASSES_2)
-        self.FC3 = nn.Linear(128*128*256, NUM_CLASSES_3)
+        self.FC1 = nn.Linear(244*244*64, NUM_CLASSES_1)
+        self.FC2 = nn.Linear(244*244*64, NUM_CLASSES_2)
+        self.FC3 = nn.Linear(244*244*64, NUM_CLASSES_3)
 
     def forward(self, x):
         x = self.Layer0(x)
@@ -36,17 +34,15 @@ class BasicCNN(nn.Module):
         x = self.Layer1(x)
         x = self.relu2(x)
 
-        x = self.pool(x)
-
         x = self.Layer2(x)
         x = self.relu3(x)
 
         x = self.Layer3(x)
         x = self.relu4(x)
 
-        x1 = F.softmax(self.FC1(x))
-        x2 = F.softmax(self.FC2(x))
-        x3 = F.softmax(self.FC3(x))
+        x1 = F.softmax(self.FC1(x.view(-1, 244*244*64)), dim=1)
+        x2 = F.softmax(self.FC2(x.view(-1, 244*244*64)), dim=1)
+        x3 = F.softmax(self.FC3(x.view(-1, 244*244*64)), dim=1)
 
         return x1, x2, x3
 
@@ -59,6 +55,8 @@ class BasicCNN(nn.Module):
 #         res_base.fc = nn.Linear(num_fts, 45)
 #         if self.pre_train:
 #             # freeze layers
+
+
 class DiseaseModel(nn.Module):
     def __init__(self):
         super(DiseaseModel, self).__init__()
@@ -164,4 +162,4 @@ class PD2SEModel(nn.Module):
         plant_class = F.softmax(self.FC1(plant_class), dim=1)
         disease_class = F.softmax(self.FC2(disease_class), dim=1)
         severity_class = F.softmax(self.FC3(severity_class), dim=1)
-        return [plant_class, disease_class, severity_class]
+        return plant_class, disease_class, severity_class

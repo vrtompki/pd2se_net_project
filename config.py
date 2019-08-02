@@ -73,7 +73,9 @@ MAP_61to45 = {'0': {'Plant ID': 1, 'Disease ID': 1, 'Severity ID': 1},
                  }
 
 # -------------------------------------------- Performance configuration -----------------------------------------------
+RANDOM_STATE = 42
 torch.cuda.current_device()
+# USE_GPU = False
 USE_GPU = torch.cuda.is_available()
 DEVICE = torch.device("cuda" if USE_GPU else "cpu")
 
