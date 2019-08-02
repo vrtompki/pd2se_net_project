@@ -1,6 +1,6 @@
 """
 definition of datasets
-Author: LucasX
+Author Vincent with influence from LucasX
 """
 import json
 import os
